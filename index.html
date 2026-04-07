@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>I3O - Gestão de Equipa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        body { background: radial-gradient(circle at top right, #0f172a, #020617); font-family: 'Plus Jakarta Sans', sans-serif; min-height: 100vh; color: white; margin: 0; }
+        .glass-card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .btn-punch-in { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+        .btn-punch-out { background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%); }
+        .btn-locked { opacity: 0.15; filter: grayscale(1); pointer-events: none; }
+        .neo-click:active { transform: scale(0.96); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+    </style>
+</head>
+<body>
+
+    <div id="login-page" class="min-h-screen flex flex-col items-center justify-center p-6">
+        <div class="w-full max-w-sm space-y-8 text-center">
+            <span class="text-6xl font-extrabold text-blue-500 tracking-tighter italic">I3O</span>
+            <div class="glass-card p-8 rounded-[2.5rem] space-y-4">
+                <input type="text" id="user-input" class="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 text-white outline-none focus:border-blue-500" placeholder="Utilizador">
+                <input type="password" id="pass-input" class="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 text-white outline-none focus:border-blue-500" placeholder="Palavra-passe">
+                <button onclick="login()" class="w-full neo-click bg-blue-600 py-5 rounded-2xl font-bold uppercase tracking-widest text-sm shadow-lg shadow-blue-600/20 text-white">Entrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="dashboard" class="hidden min-h-screen flex flex-col">
+        <nav class="glass-card sticky top-0 z-50 p-5 flex justify-between items-center">
+            <div>
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Sessão Ativa</p>
+                <h2 id="display-nome" class="text-lg font-extrabold text-white">--</h2>
+            </div>
+            <button onclick="location.reload()" class="text-red-500 text-[10px] font-black uppercase bg-red-500/10 px-3 py-2 rounded-lg">Sair</button>
+        </nav>
+
+        <main id="tab-ponto" class="p-6 max-w-md mx-auto w-full space-y-6 flex-1 overflow-y-auto no-scrollbar pb-24">
+            <div class="glass-card rounded-[3rem] p-10 text-center">
+                <div id="clock" class="text-6xl font-black tracking-tighter text-white">00:00:00</div>
+                <div id="role-label" class="text-blue-500 text-[10px] font-black uppercase mt-2">--</div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 text-white">
+                <button id="btn-entrada" onclick="registarPonto('ENTRADA')" class="neo-click btn-punch-in h-24 rounded-[2rem] flex items-center px-8 text-left shadow-lg">
+                    <span class="text-2xl font-black italic tracking-tighter">ENTRADA</span>
+                </button>
+                <button id="btn-saida" onclick="registarPonto('SAÍDA')" class="neo-click btn-punch-out h-24 rounded-[2rem] flex items-center px-8 text-left shadow-lg">
+                    <span class="text-2xl font-black italic tracking-tighter">SAÍDA</span>
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <h3 class="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-4">Os meus últimos registos</h3>
+                <div id="meu-historico-corpo" class="space-y-3"></div>
+            </div>
+        </main>
+
+        <main id="tab-admin" class="hidden p-6 max-w-5xl mx-auto w-full space-y-10 flex-1 overflow-y-auto no-scrollbar pb-32 text-white">
+            
+            <section class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xl font-black italic uppercase">Registos de Ponto</h2>
+                    <input type="date" id="filtro-data" onchange="renderizarTabelaAdmin()" class="bg-blue-600/10 text-blue-500 font-bold p-2 rounded-xl text-xs outline-none border border-blue-500/20">
+                </div>
+                <div class="glass-card rounded-[2rem] overflow-hidden">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-white/5 text-[9px] uppercase font-black text-slate-500">
+                            <tr><th class="p-4">Nome</th><th class="p-4">Entrada</th><th class="p-4">Saída</th></tr>
+                        </thead>
+                        <tbody id="tabela-admin-corpo" class="divide-y divide-white/5"></tbody>
+                    </table>
+                </div>
+                <button onclick="exportarExcel()" class="w-full py-4 glass-card rounded-2xl font-bold text-emerald-500 text-sm">Exportar Todos os Registos (CSV)</button>
+            </section>
+
+            <section class="space-y-4">
+                <h2 class="text-xl font-black italic uppercase text-blue-500">Adicionar Colaborador</h2>
+                <div class="glass-card p-6 rounded-[2rem] grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                    <div>
+                        <label class="text-[9px] font-black uppercase text-slate-500 ml-2">Nome Completo</label>
+                        <input type="text" id="add-nome" class="w-full bg-slate-900/50 border border-white/10 rounded-xl p-3 text-sm outline-none focus:border-blue-500" placeholder="Ex: André Silva">
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-black uppercase text-slate-500 ml-2">Login (Utilizador)</label>
+                        <input type="text" id="add-user" class="w-full bg-slate-900/50 border border-white/10 rounded-xl p-3 text-sm outline-none focus:border-blue-500" placeholder="Ex: andre">
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-black uppercase text-slate-500 ml-2">Palavra-Passe</label>
+                        <input type="text" id="add-pass" class="w-full bg-slate-900/50 border border-white/10 rounded-xl p-3 text-sm outline-none focus:border-blue-500" placeholder="Ex: 1234">
+                    </div>
+                    <button onclick="adicionarMembro()" class="bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold uppercase text-xs neo-click">Adicionar</button>
+                </div>
+            </section>
+
+            <section class="space-y-4">
+                <h2 class="text-xl font-black italic uppercase text-blue-500">Gestão de Utilizadores</h2>
+                <div class="glass-card rounded-[2rem] overflow-hidden overflow-x-auto no-scrollbar">
+                    <table class="w-full text-left text-sm min-w-[600px]">
+                        <thead class="bg-white/5 text-[9px] uppercase font-black text-slate-500">
+                            <tr>
+                                <th class="p-4">Nome</th><th class="p-4">Utilizador</th><th class="p-4">Palavra-Passe</th><th class="p-4 text-center">Salvar</th><th class="p-4 text-center">Eliminar</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-users-corpo" class="divide-y divide-white/5"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+
+        <div id="admin-nav" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-sm glass-card rounded-full p-2 flex justify-around shadow-2xl border-white/20">
+            <button id="nav-ponto-btn" onclick="switchTab('ponto')" class="flex-1 py-3 font-bold text-xs uppercase text-blue-500">Ponto</button>
+            <button id="nav-admin-btn" onclick="switchTab('admin')" class="flex-1 py-3 font-bold text-xs uppercase text-slate-500">Gestão I3O</button>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURAÇÃO SUPABASE ---
+        // JÁ LINKADO COM AS TUAS CREDENCIAIS:
+        const SUPABASE_URL = 'https://gcmsrbewvhcunwtscdwp.supabase.co'; 
+        const SUPABASE_KEY = 'sb_publishable_FP5EuchZRac18cyPZhj1uQ_pa0Tinuo'; 
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let currentUser = null;
+
+        // --- LOGIN ---
+        async function login() {
+            const u = document.getElementById('user-input').value.trim().toLowerCase();
+            const p = document.getElementById('pass-input').value;
+
+            // Busca o utilizador na tabela i3o_equipa
+            const { data: user, error } = await _supabase
+                .from('i3o_equipa')
+                .select('*')
+                .eq('id', u)
+                .single();
+
+            if (user && user.pass === p) {
+                currentUser = user;
+                document.getElementById('login-page').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                document.getElementById('display-nome').innerText = currentUser.nome;
+                document.getElementById('role-label').innerText = currentUser.role;
+                document.getElementById('filtro-data').value = new Date().toISOString().split('T')[0];
+                
+                if(currentUser.role === 'ADMIN') {
+                    document.getElementById('admin-nav').classList.remove('hidden');
+                    renderizarGestaoUsuarios();
+                }
+                atualizarUI();
+            } else { 
+                alert("Login falhou. Verifique o utilizador e a palavra-passe."); 
+            }
+        }
+
+        // --- SISTEMA DE PONTO ---
+        async function registarPonto(tipo) {
+            const agora = new Date();
+            const payload = {
+                user_id: currentUser.id,
+                nome: currentUser.nome,
+                tipo: tipo,
+                data_iso: agora.toISOString().split('T')[0],
+                data_pt: agora.toLocaleDateString('pt-PT'),
+                hora: agora.toLocaleTimeString('pt-PT', {hour: '2-digit', minute:'2-digit'})
+            };
+
+            const { error } = await _supabase.from('i3o_pontos').insert([payload]);
+            if (error) {
+                alert("Erro ao registar na base de dados: " + error.message);
+            } else {
+                atualizarUI();
+            }
+        }
+
+        async function atualizarUI() {
+            const hoje = new Date().toISOString().split('T')[0];
+            
+            const { data: meusHoje } = await _supabase
+                .from('i3o_pontos')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .eq('data_iso', hoje)
+                .order('created_at', { ascending: true });
+
+            const ultimo = meusHoje && meusHoje.length > 0 ? meusHoje[meusHoje.length - 1] : null;
+
+            document.getElementById('btn-entrada').classList.toggle('btn-locked', !!(ultimo && ultimo.tipo === 'ENTRADA'));
+            document.getElementById('btn-saida').classList.toggle('btn-locked', !ultimo || ultimo.tipo === 'SAÍDA');
+
+            const { data: historico } = await _supabase
+                .from('i3o_pontos')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .order('created_at', { ascending: false })
+                .limit(5);
+
+            document.getElementById('meu-historico-corpo').innerHTML = (historico || []).map(r => `
+                <div class="glass-card p-4 rounded-2xl flex justify-between items-center border-l-4 ${r.tipo === 'ENTRADA' ? 'border-emerald-500' : 'border-rose-500'}">
+                    <div><p class="text-[10px] font-bold text-slate-500">${r.data_pt}</p><p class="font-extrabold italic uppercase text-xs text-white">${r.tipo}</p></div>
+                    <p class="text-xl font-black text-white">${r.hora}</p>
+                </div>`).join('');
+
+            if(currentUser.role === 'ADMIN') renderizarTabelaAdmin();
+        }
+
+        // --- ADMIN: TABELA ---
+        async function renderizarTabelaAdmin() {
+            const filtro = document.getElementById('filtro-data').value;
+            const { data: filtrados } = await _supabase
+                .from('i3o_pontos')
+                .select('*')
+                .eq('data_iso', filtro);
+
+            const agrupado = {};
+            (filtrados || []).forEach(r => {
+                if(!agrupado[r.nome]) agrupado[r.nome] = { e: '--:--', s: '--:--' };
+                r.tipo === 'ENTRADA' ? agrupado[r.nome].e = r.hora : agrupado[r.nome].s = r.hora;
+            });
+
+            document.getElementById('tabela-admin-corpo').innerHTML = Object.entries(agrupado).map(([n, p]) => `
+                <tr class="text-xs font-bold"><td class="p-4 text-white">${n}</td><td class="p-4 text-emerald-400">${p.e}</td><td class="p-4 text-rose-400">${p.s}</td></tr>`).join('') || '<tr><td colspan="3" class="p-10 text-center text-slate-600">Sem registos</td></tr>';
+        }
+
+        // --- ADMIN: GESTÃO ---
+        async function renderizarGestaoUsuarios() {
+            const { data: usuarios } = await _supabase.from('i3o_equipa').select('*').order('nome');
+            const corpo = document.getElementById('tabela-users-corpo');
+            corpo.innerHTML = (usuarios || []).map(u => `
+                <tr class="text-xs">
+                    <td class="p-3"><input type="text" id="edit-nome-${u.id}" value="${u.nome}" class="bg-white/5 border border-white/10 rounded-lg px-2 py-1 w-full text-white font-bold outline-none"></td>
+                    <td class="p-3"><span class="text-slate-400">${u.id}</span></td>
+                    <td class="p-3"><input type="text" id="edit-pass-${u.id}" value="${u.pass}" class="bg-white/5 border border-white/10 rounded-lg px-2 py-1 w-full text-blue-400 outline-none"></td>
+                    <td class="p-3 text-center"><button onclick="salvarAlteracoes('${u.id}')" class="bg-emerald-600/20 text-emerald-500 text-[10px] px-3 py-2 rounded-lg font-bold">OK</button></td>
+                    <td class="p-3 text-center">${u.id === 'admin' ? '-' : `<button onclick="removerMembro('${u.id}')" class="text-rose-500 text-[10px] font-bold">Eliminar</button>`}</td>
+                </tr>`).join('');
+        }
+
+        async function adicionarMembro() {
+            const n = document.getElementById('add-nome').value.trim();
+            const u = document.getElementById('add-user').value.trim().toLowerCase();
+            const p = document.getElementById('add-pass').value.trim();
+            if(!n || !u || !p) return alert("Preencha todos os campos!");
+
+            const { error } = await _supabase.from('i3o_equipa').insert([{ id: u, nome: n, pass: p, role: 'USER' }]);
+            if(error) alert("Erro: " + error.message);
+            else { 
+                alert("Colaborador adicionado!");
+                renderizarGestaoUsuarios();
+                document.getElementById('add-nome').value = ''; document.getElementById('add-user').value = ''; document.getElementById('add-pass').value = '';
+            }
+        }
+
+        async function salvarAlteracoes(id) {
+            const novoNome = document.getElementById(`edit-nome-${id}`).value;
+            const novaPass = document.getElementById(`edit-pass-${id}`).value;
+            await _supabase.from('i3o_equipa').update({ nome: novoNome, pass: novaPass }).eq('id', id);
+            alert("Dados de " + novoNome + " atualizados.");
+            renderizarGestaoUsuarios();
+        }
+
+        async function removerMembro(id) {
+            if(confirm("Deseja eliminar este colaborador da base de dados?")) {
+                await _supabase.from('i3o_equipa').delete().eq('id', id);
+                renderizarGestaoUsuarios();
+            }
+        }
+
+        async function exportarExcel() {
+            const { data } = await _supabase.from('i3o_pontos').select('*').order('created_at', {ascending: false});
+            let csv = "NOME;DATA;TIPO;HORA\n";
+            data.forEach(r => { csv += `${r.nome};${r.data_pt};${r.tipo};${r.hora}\n`; });
+            const blob = new Blob(["\ufeff", csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `Relatorio_Ponto_I3O.csv`;
+            link.click();
+        }
+
+        function switchTab(t) {
+            document.getElementById('tab-ponto').classList.toggle('hidden', t !== 'ponto');
+            document.getElementById('tab-admin').classList.toggle('hidden', t !== 'admin');
+            document.getElementById('nav-ponto-btn').classList.toggle('text-blue-500', t === 'ponto');
+            document.getElementById('nav-ponto-btn').classList.toggle('text-slate-500', t !== 'ponto');
+            document.getElementById('nav-admin-btn').classList.toggle('text-blue-500', t === 'admin');
+            document.getElementById('nav-admin-btn').classList.toggle('text-slate-500', t !== 'admin');
+        }
+
+        setInterval(() => { 
+            const el = document.getElementById('clock');
+            if(el) el.innerText = new Date().toLocaleTimeString('pt-PT'); 
+        }, 1000);
+    </script>
+</body>
+</html>
