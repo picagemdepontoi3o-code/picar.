@@ -261,18 +261,19 @@
         }
 
         function atualizarUI() {
-            const hoje = new Date().toISOString().split('T')[0];
-            
-            const meusHoje = dbPontos.filter(r => r.user_id === currentUser.id && r.data_iso === hoje);
-            const ultimo = meusHoje.length > 0 ? meusHoje[meusHoje.length - 1] : null;
+            // Historial global de todos os registos do utilizador para validar o último estado independentemente do dia, 
+            // ou focado no dia atual. Aqui avaliamos o último registo geral do utilizador para garantir a alternância correta.
+            const historicoGeral = dbPontos.filter(r => r.user_id === currentUser.id);
+            const ultimo = historicoGeral.length > 0 ? historicoGeral[historicoGeral.length - 1] : null;
 
-            document.getElementById('btn-entrada').classList.toggle('btn-locked', !!(ultimo && ultimo.tipo === 'ENTRADA'));
-            document.getElementById('btn-saida').classList.toggle('btn-locked', !ultimo || ultimo.tipo === 'SAÍDA');
+            // Se nunca deu entrada, ou se o último foi SAÍDA -> Próximo passo obrigatório é ENTRADA (!aEntrar = false para Entrada, true para Saída)
+            // Se o último foi ENTRADA -> Próximo passo obrigatório é SAÍDA.
+            const aEntrar = !ultimo || ultimo.tipo === 'SAÍDA';
 
-            const historico = dbPontos
-                .filter(r => r.user_id === currentUser.id)
-                .slice(-5)
-                .reverse();
+            document.getElementById('btn-entrada').classList.toggle('btn-locked', !aEntrar);
+            document.getElementById('btn-saida').classList.toggle('btn-locked', aEntrar);
+
+            const historico = historicoGeral.slice(-5).reverse();
 
             const histContainer = document.getElementById('meu-historico-corpo');
             if (historico.length === 0) {
